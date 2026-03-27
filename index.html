@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Perception Master | Premium Writing Assistant</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h1>AI PERCEPTION MASTER</h1>
+        </div>
+        <div class="mode-toggle">
+            <span class="score-label">Readability Heatmap</span>
+            <label class="switch">
+                <input type="checkbox" id="heatmap-toggle" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+        <div class="score-hud">
+            <div class="score-card">
+                <div class="score-header"><span class="score-label">Naturalness</span><span class="score-value" id="val-naturalness">100%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="fill-naturalness" style="width: 100%;"></div></div>
+            </div>
+            <div class="score-card">
+                <div class="score-header"><span class="score-label">Professionalism</span><span class="score-value" id="val-professionalism">100%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="fill-professionalism" style="width: 100%;"></div></div>
+            </div>
+            <div class="score-card">
+                <div class="score-header"><span class="score-label">Clarity</span><span class="score-value" id="val-clarity">100%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="fill-clarity" style="width: 100%;"></div></div>
+            </div>
+            <div class="score-card">
+                <div class="score-header"><span class="score-label">Humanity</span><span class="score-value" id="val-humanity">0%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="fill-humanity" style="width: 0%;"></div></div>
+            </div>
+            <div class="divider"></div>
+            <h3 class="section-title">Tech Blog Intelligence</h3>
+            <div class="tech-stats">
+                <div class="gauge-container">
+                    <svg viewBox="0 0 36 36" class="circular-chart">
+                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path id="gauge-code" class="circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div class="gauge-label"><span id="label-code">0%</span><small>Code Ratio</small></div>
+                </div>
+                <div class="gauge-container">
+                    <svg viewBox="0 0 36 36" class="circular-chart">
+                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path id="gauge-jargon" class="circle" style="stroke: #A78BFF;" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div class="gauge-label"><span id="label-jargon">0%</span><small>Jargon</small></div>
+                </div>
+            </div>
+            <div class="score-card" style="margin-top: 1rem;">
+                <div class="score-header"><span class="score-label">Substance (Why)</span><span class="score-value" id="val-substance">0%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="fill-substance" style="width: 0%; background: #00FF94;"></div></div>
+            </div>
+            <div class="pacing-container">
+                <span class="score-label">Scannability Map</span>
+                <svg id="pacing-arc" viewBox="0 0 200 60" preserveAspectRatio="none">
+                    <path id="pacing-path" d="M0 30 Q 50 30, 100 30 T 200 30" fill="none" stroke="var(--primary)" stroke-width="2" />
+                </svg>
+            </div>
+        </div>
+    </div>
+    <div class="main-container">
+        <div class="editor-wrapper">
+            <div id="editor" contenteditable="true" spellcheck="false" placeholder="Start typing your technical masterpiece here...">Let's utilize the synergistic paradigms in order to maximize output. This sort of thing is maybe gonna be great tbh!!</div>
+        </div>
+    </div>
+    <div id="tooltip">
+        <div class="tooltip-type" id="tooltip-type">Type</div>
+        <div class="tooltip-suggestion" id="tooltip-suggestion">Suggestion text goes here.</div>
+    </div>
+    <div class="status-indicator">
+        <div class="dot"></div>
+        <span>AI Engine</span>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
