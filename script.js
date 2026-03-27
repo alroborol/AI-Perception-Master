@@ -4,17 +4,33 @@
  */
 class PerceptionAnalyzer {
     constructor(d) {
-        // Pre-compile linguistic patterns for O(1) matching speed
-        this.un = (d.unnatural || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
-        this.up = (d.unprofessional || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
-        this.am = (d.ambiguous || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
+        // Build a single Union Regex for all finding categories (O(N) Scanning)
+        this.fDict = [];
+        let combined = [];
         
-        this.jr = (d.jargon || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
-        this.ra = (d.rationale || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
-        this.hu = (d.humanity || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
+        [{ l: d.unnatural, t: 'unnatural' }, { l: d.unprofessional, t: 'unprofessional' }, { l: d.ambiguous, t: 'ambiguous' }].forEach(c => {
+            (c.l || []).forEach(entry => {
+                const [p, s] = Array.isArray(entry) ? entry : [entry, ""];
+                combined.push(`(${p})`);
+                this.fDict.push({ type: c.t, suggestion: s });
+            });
+        });
+        
+        this.fRE = new RegExp(combined.join('|'), 'gi');
+        
+        // Technical & Tonality patterns
+        const pComp = (list) => (list || []).map(entry => {
+            const [p, s] = Array.isArray(entry) ? entry : [entry, ""];
+            try { return [new RegExp(p, 'gi'), s]; } catch(e) { return null; }
+        }).filter(x => x);
+
+        this.jr = pComp(d.jargon);
+        this.ra = pComp(d.rationale);
+        this.hu = pComp(d.humanity);
     }
 
     analyze(text) {
+        const start = performance.now();
         const f = this._analyzeWords(text);
         const s = this._analyzeSentences(text);
         const p = this._analyzeParagraphs(text, s);
@@ -28,19 +44,24 @@ class PerceptionAnalyzer {
         const ra = this._calculateRationale(text);
         const hu = this._calculateHumanity(text);
         const sc = this._getScores(text, f, ra, hu);
+        console.log(`Perception Scan: ${Math.round(performance.now() - start)}ms`);
         return { findings: f, sentences: s, paragraphs: p, headings: hl, tech_metrics: { code_ratio: cr, jargon_density: jd, rationale: ra, humanity: hu }, scores: sc };
     }
 
     _analyzeWords(text) {
         let res = [];
-        [{ l: this.un, t: 'unnatural' }, { l: this.up, t: 'unprofessional' }, { l: this.am, t: 'ambiguous' }].forEach(c => {
-            c.l.forEach(([r, s]) => {
-                let m; r.lastIndex = 0; // Reset pre-compiled regex
-                while ((m = r.exec(text)) !== null) {
-                    res.push({ start: m.index, end: m.index + m[0].length, type: c.t, text: m[0], suggestion: s });
+        this.fRE.lastIndex = 0;
+        let m;
+        while ((m = this.fRE.exec(text)) !== null) {
+            // Find which group matched
+            for (let i = 1; i < m.length; i++) {
+                if (m[i]) {
+                    const dict = this.fDict[i - 1];
+                    res.push({ start: m.index, end: m.index + m[i].length, type: dict.type, text: m[i], suggestion: dict.suggestion });
+                    break;
                 }
-            });
-        });
+            }
+        }
         res.sort((a, b) => a.start - b.start);
         let fin = [];
         if (res.length) {
@@ -170,7 +191,11 @@ async function init() {
         analyzer = new PerceptionAnalyzer(d);
         document.body.classList.add('engine-ready');
         analyze();
-    } catch (e) { console.error("Engine failure", e); }
+    } catch (e) { 
+        console.error("Engine failure", e);
+        statusText.innerText = "Engine Error";
+        statusCont.className = "status-indicator error";
+    }
 }
 
 ed.onkeyup = () => {
@@ -182,7 +207,16 @@ ed.onkeyup = () => {
 
 function analyze() {
     try {
-        const text = ed.innerText; if (!text.trim() || !analyzer) return;
+        const text = ed.innerText; 
+        if (!text.trim()) {
+            statusCont.classList.remove('analyzing', 'fatigue', 'substance', 'humanity', 'error');
+            statusText.innerText = "System Ready";
+            return;
+        }
+        if (!analyzer) {
+            statusText.innerText = "Engine Initializing...";
+            return;
+        }
         const res = analyzer.analyze(text);
         
         updateStatus(res);
@@ -207,6 +241,11 @@ function updateStatus(res) {
     statusCont.classList.remove('analyzing', 'fatigue', 'substance', 'humanity', 'error');
     
     const totalSents = res.sentences.length;
+    if (totalSents === 0) {
+        statusText.innerText = "System Ready";
+        return;
+    }
+    
     const redSents = res.sentences.filter(s => {
         // Recalculate fatigue for the status check
         const idx = res.sentences.indexOf(s);
@@ -236,6 +275,7 @@ function updateArc(sents, paras, headings) {
     const arcSegments = document.getElementById('arc-segments');
     if (!arcSegments) return;
     arcSegments.innerHTML = '';
+    const frag = document.createDocumentFragment();
     const w = 200, h = 60, p = 10;
     
     const paraMap = getSentenceParaMap(sents, paras);
@@ -267,7 +307,7 @@ function updateArc(sents, paras, headings) {
         path.setAttribute('class', 'arc-segment-clickable');
         path.onclick = () => jumpToSentence(p1.start);
         if (p1.fatigue >= 1) path.setAttribute('style', `filter: drop-shadow(0 0 6px ${color}); opacity: 1;`);
-        arcSegments.appendChild(path);
+        frag.appendChild(path);
         
         if (p1.isHeading) {
             const marker = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -279,22 +319,33 @@ function updateArc(sents, paras, headings) {
             marker.setAttribute('class', 'arc-segment-clickable');
             marker.onclick = () => jumpToSentence(p1.start);
             marker.setAttribute('style', 'filter: drop-shadow(0 0 5px rgba(167,139,255,1)); opacity: 0.6;');
-            arcSegments.appendChild(marker);
+            frag.appendChild(marker);
         }
     }
+    arcSegments.appendChild(frag);
 }
 
 function render(f, sents) {
     hmt.checked ? document.body.classList.add('heatmap-on') : document.body.classList.remove('heatmap-on');
-    const sel = window.getSelection(); if (!sel.rangeCount) return;
-    const range = sel.getRangeAt(0), offset = getCaret(ed, range), text = ed.innerText;
-    let html = "";
+    const offset = getCaret(ed);
+    const text = ed.innerText;
+    let html = "", fIdx = 0;
+    
     sents.forEach(s => {
         const cls = s.complexity > .7 ? "sentence-high" : (s.complexity > .4 ? "sentence-med" : "sentence-low");
         html += `<span class="sentence ${cls}" data-start="${s.start}">`;
-        const sf = f.filter(x => x.start >= s.start && x.end <= s.end);
+        
+        // Linear two-pointer mapping for findings within this sentence
         let cur = s.start;
-        sf.forEach(x => { html += text.substring(cur, x.start) + `<span class="mark mark-${x.type}" data-type="${x.type}" data-suggestion="${x.suggestion}">${text.substring(x.start, x.end)}</span>`; cur = x.end; });
+        while (fIdx < f.length && f[fIdx].start < s.end) {
+            const x = f[fIdx];
+            if (x.start >= s.start) {
+                html += text.substring(cur, x.start) + `<span class="mark mark-${x.type}" data-type="${x.type}" data-suggestion="${x.suggestion}">${text.substring(x.start, x.end)}</span>`;
+                cur = x.end;
+            }
+            fIdx++;
+        }
+        
         html += text.substring(cur, s.end) + `</span>`;
     });
     if (ed.innerHTML !== html) { 
@@ -313,15 +364,43 @@ function jumpToSentence(start) {
     }
 }
 
-function getCaret(e, r) { const p = r.cloneRange(); p.selectNodeContents(e); p.setEnd(r.endContainer, r.endOffset); return p.toString().length; }
-function setCaret(e, o) {
-    const s = window.getSelection(), r = document.createRange(); let c = 0, f = false;
-    (function t(n) {
-        if (f) return;
-        if (n.nodeType === 3) { const next = c + n.length; if (o >= c && o <= next) { r.setStart(n, o - c); r.setEnd(n, o - c); f = true; } c = next; }
-        else for (let i = 0; i < n.childNodes.length; i++) t(n.childNodes[i]);
-    })(e);
-    if (f) { s.removeAllRanges(); s.addRange(r); }
+function getCaret(el) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return 0;
+    const range = sel.getRangeAt(0);
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(el);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    return preRange.toString().length;
+}
+
+function setCaret(el, offset) {
+    const sel = window.getSelection();
+    const range = document.createRange();
+    let curr = 0;
+    const nodeStack = [el];
+    let node, found = false;
+
+    while (nodeStack.length > 0 && !found) {
+        node = nodeStack.pop();
+        if (node.nodeType === 3) {
+            const next = curr + node.length;
+            if (offset >= curr && offset <= next) {
+                range.setStart(node, offset - curr);
+                range.setEnd(node, offset - curr);
+                found = true;
+            }
+            curr = next;
+        } else {
+            for (let i = node.childNodes.length - 1; i >= 0; i--) {
+                nodeStack.push(node.childNodes[i]);
+            }
+        }
+    }
+    if (found) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
 }
 
 function attach() {
