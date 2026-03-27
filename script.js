@@ -16,12 +16,17 @@ class PerceptionAnalyzer {
         const f = this._analyzeWords(text);
         const s = this._analyzeSentences(text);
         const p = this._analyzeParagraphs(text, s);
+        // Robust H1-H3 detection
+        const h_re = /^(\#{1,3})\s+(.*)/gm;
+        let hl = [], m;
+        while ((m = h_re.exec(text)) !== null) hl.push({ start: m.index, end: m.index + m[0].length, level: m[1].length });
+        
         const cr = this._estimateCodeRatio(text);
         const jd = this._calculateJargonDensity(text);
         const ra = this._calculateRationale(text);
         const hu = this._calculateHumanity(text);
         const sc = this._getScores(text, f, ra, hu);
-        return { findings: f, sentences: s, paragraphs: p, tech_metrics: { code_ratio: cr, jargon_density: jd, rationale: ra, humanity: hu }, scores: sc };
+        return { findings: f, sentences: s, paragraphs: p, headings: hl, tech_metrics: { code_ratio: cr, jargon_density: jd, rationale: ra, humanity: hu }, scores: sc };
     }
 
     _analyzeWords(text) {
@@ -50,7 +55,8 @@ class PerceptionAnalyzer {
     }
 
     _analyzeSentences(text) {
-        const re = /([.!?]+(?:\s+|\'|\"|$))/g;
+        // Split on punctuation OR newlines to capture headers effectively
+        const re = /([.!?]+(?:\s+|\'|\"|$))|(\n+)/g;
         let sents = [], last = 0, m;
         while ((m = re.exec(text)) !== null) {
             const end = m.index + m[0].length;
@@ -115,7 +121,9 @@ class PerceptionAnalyzer {
             const start = text.indexOf(p, cur);
             const end = start + p.length; cur = end;
             const ps = sents.filter(s => s.start >= start && s.end <= end);
-            return { start, end, sentenceCount: ps.length, isHeading: p.split(/\s+/).length < 8 && ps.length === 1 };
+            // Enhanced heuristic: Is it a short line or starts with #?
+            const isHeading = p.trim().startsWith('#') || (p.split(/\s+/).length < 10 && ps.length <= 1);
+            return { start, end, sentenceCount: ps.length, isHeading };
         });
     }
 
@@ -161,11 +169,11 @@ function analyze() {
     gauges.jargon.l.innerText = `${res.tech_metrics.jargon_density}%`;
     substanceFill.style.width = `${res.tech_metrics.rationale}%`;
     substanceVal.innerText = `${Math.floor(res.tech_metrics.rationale)}%`;
-    updateArc(res.sentences, res.paragraphs);
+    updateArc(res.sentences, res.paragraphs, res.headings);
     render(res.findings, res.sentences);
 }
 
-function updateArc(sents, paras) {
+function updateArc(sents, paras, headings) {
     if (!sents || sents.length < 2) return;
     const arcSegments = document.getElementById('arc-segments');
     if (!arcSegments) return;
@@ -174,13 +182,14 @@ function updateArc(sents, paras) {
     
     const pts = sents.map((s, i) => {
         const para = paras.find(pr => s.start >= pr.start && s.end <= pr.end);
-        const fatigue = sents.slice(Math.max(0, i - 2), i + 1).reduce((acc, curr) => acc + (curr.length > 25 ? 1 : 0), 0);
+        const heading = headings.find(h => s.start >= h.start && s.start < h.end);
+        const fatigue = sents.slice(Math.max(0, i - 2), i + 1).reduce((acc, curr) => acc + (curr.length > 20 ? 1 : 0), 0);
         return { 
             x: (i / (sents.length - 1)) * w, 
             y: h - (Math.min(s.length, 30) / 30 * (h - p * 2)) - p, 
             gap: para && para.end === s.end, 
-            isHeading: para && para.isHeading && s.start === para.start,
-            fatigue 
+            isHeading: !!heading,
+            start: s.start
         };
     });
     
@@ -192,20 +201,24 @@ function updateArc(sents, paras) {
         const color = p1.fatigue >= 2 ? '#FF5E5E' : (p1.fatigue >= 1 ? '#FFB347' : '#47A1FF');
         path.setAttribute('d', `M ${p1.x},${p1.y} L ${p2.x},${p2.y}`);
         path.setAttribute('stroke', color);
-        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke-width', p1.fatigue >= 1 ? '4' : '2');
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke-linecap', 'round');
-        if (p1.fatigue >= 1) path.setAttribute('style', `filter: drop-shadow(0 0 3px ${color})`);
+        path.setAttribute('class', 'arc-segment-clickable');
+        path.onclick = () => jumpToSentence(p1.start);
+        if (p1.fatigue >= 1) path.setAttribute('style', `filter: drop-shadow(0 0 6px ${color}); opacity: 1;`);
         arcSegments.appendChild(path);
         
         if (p1.isHeading) {
             const marker = document.createElementNS("http://www.w3.org/2000/svg", "rect");
             marker.setAttribute('x', p1.x - 0.5);
-            marker.setAttribute('y', p1.y - 5);
+            marker.setAttribute('y', '0'); // Full height
             marker.setAttribute('width', '1');
-            marker.setAttribute('height', '10');
+            marker.setAttribute('height', '60');
             marker.setAttribute('fill', '#A78BFF');
-            marker.setAttribute('style', 'filter: drop-shadow(0 0 5px rgba(167,139,255,0.8))');
+            marker.setAttribute('class', 'arc-segment-clickable');
+            marker.onclick = () => jumpToSentence(p1.start);
+            marker.setAttribute('style', 'filter: drop-shadow(0 0 5px rgba(167,139,255,1)); opacity: 0.6;');
             arcSegments.appendChild(marker);
         }
     }
@@ -218,7 +231,7 @@ function render(f, sents) {
     let html = "";
     sents.forEach(s => {
         const cls = s.complexity > .7 ? "sentence-high" : (s.complexity > .4 ? "sentence-med" : "sentence-low");
-        html += `<span class="sentence ${cls}">`;
+        html += `<span class="sentence ${cls}" data-start="${s.start}">`;
         const sf = f.filter(x => x.start >= s.start && x.end <= s.end);
         let cur = s.start;
         sf.forEach(x => { html += text.substring(cur, x.start) + `<span class="mark mark-${x.type}" data-type="${x.type}" data-suggestion="${x.suggestion}">${text.substring(x.start, x.end)}</span>`; cur = x.end; });
@@ -226,6 +239,15 @@ function render(f, sents) {
     });
     if (ed.innerHTML !== html) { ed.innerHTML = html; setCaret(ed, offset); }
     attach();
+}
+
+function jumpToSentence(start) {
+    const target = ed.querySelector(`.sentence[data-start="${start}"]`);
+    if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('sentence-jump-target');
+        setTimeout(() => target.classList.remove('sentence-jump-target'), 2000);
+    }
 }
 
 function getCaret(e, r) { const p = r.cloneRange(); p.selectNodeContents(e); p.setEnd(r.endContainer, r.endOffset); return p.toString().length; }
