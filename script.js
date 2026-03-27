@@ -4,12 +4,14 @@
  */
 class PerceptionAnalyzer {
     constructor(d) {
-        this.un = d.unnatural || [];
-        this.up = d.unprofessional || [];
-        this.am = d.ambiguous || [];
-        this.jr = d.jargon || [];
-        this.ra = d.rationale || [];
-        this.hu = d.humanity || [];
+        // Pre-compile linguistic patterns for O(1) matching speed
+        this.un = (d.unnatural || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
+        this.up = (d.unprofessional || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
+        this.am = (d.ambiguous || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
+        
+        this.jr = (d.jargon || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
+        this.ra = (d.rationale || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
+        this.hu = (d.humanity || []).map(([p, s]) => [new RegExp(p, 'gi'), s]);
     }
 
     analyze(text) {
@@ -32,8 +34,8 @@ class PerceptionAnalyzer {
     _analyzeWords(text) {
         let res = [];
         [{ l: this.un, t: 'unnatural' }, { l: this.up, t: 'unprofessional' }, { l: this.am, t: 'ambiguous' }].forEach(c => {
-            c.l.forEach(([p, s]) => {
-                const r = new RegExp(p, 'gi'); let m;
+            c.l.forEach(([r, s]) => {
+                let m; r.lastIndex = 0; // Reset pre-compiled regex
                 while ((m = r.exec(text)) !== null) {
                     res.push({ start: m.index, end: m.index + m[0].length, type: c.t, text: m[0], suggestion: s });
                 }
@@ -147,7 +149,19 @@ const scores = ['naturalness', 'professionalism', 'clarity', 'humanity'].reduce(
 const gauges = { code: { g: document.getElementById('gauge-code'), l: document.getElementById('label-code') }, jargon: { g: document.getElementById('gauge-jargon'), l: document.getElementById('label-jargon') } };
 const substanceFill = document.getElementById('fill-substance'), substanceVal = document.getElementById('val-substance');
 const pacingPath = document.getElementById('pacing-path'), hmt = document.getElementById('heatmap-toggle');
+const statusText = document.getElementById('status-text'), statusCont = document.getElementById('status-container');
 let dbt, analyzer;
+
+// Linear-time mapping for scannability map
+function getSentenceParaMap(sents, paras) {
+    let map = new Array(sents.length);
+    let pIdx = 0;
+    sents.forEach((s, sIdx) => {
+        while (pIdx < paras.length && paras[pIdx].end < s.end) pIdx++;
+        map[sIdx] = paras[pIdx] || paras[paras.length - 1];
+    });
+    return map;
+}
 
 async function init() {
     try {
@@ -159,19 +173,63 @@ async function init() {
     } catch (e) { console.error("Engine failure", e); }
 }
 
+ed.onkeyup = () => {
+    clearTimeout(dbt);
+    statusText.innerText = "Analyzing...";
+    statusCont.classList.add('analyzing');
+    dbt = setTimeout(analyze, 350);
+};
+
 function analyze() {
-    const text = ed.innerText; if (!text.trim() || !analyzer) return;
-    const res = analyzer.analyze(text);
-    Object.keys(scores).forEach(s => { const v = res.scores[s]; if (scores[s].v) { scores[s].v.innerText = `${v}%`; scores[s].f.style.width = `${v}%`; } });
-    gauges.code.g.setAttribute('stroke-dasharray', `${res.tech_metrics.code_ratio}, 100`);
-    gauges.code.l.innerText = `${res.tech_metrics.code_ratio}%`;
-    gauges.jargon.g.setAttribute('stroke-dasharray', `${res.tech_metrics.jargon_density}, 100`);
-    gauges.jargon.l.innerText = `${res.tech_metrics.jargon_density}%`;
-    substanceFill.style.width = `${res.tech_metrics.rationale}%`;
-    substanceVal.innerText = `${Math.floor(res.tech_metrics.rationale)}%`;
-    updateArc(res.sentences, res.paragraphs, res.headings);
-    render(res.findings, res.sentences);
+    try {
+        const text = ed.innerText; if (!text.trim() || !analyzer) return;
+        const res = analyzer.analyze(text);
+        
+        updateStatus(res);
+        
+        Object.keys(scores).forEach(s => { const v = res.scores[s]; if (scores[s].v) { scores[s].v.innerText = `${v}%`; scores[s].f.style.width = `${v}%`; } });
+        gauges.code.g.setAttribute('stroke-dasharray', `${res.tech_metrics.code_ratio}, 100`);
+        gauges.code.l.innerText = `${res.tech_metrics.code_ratio}%`;
+        gauges.jargon.g.setAttribute('stroke-dasharray', `${res.tech_metrics.jargon_density}, 100`);
+        gauges.jargon.l.innerText = `${res.tech_metrics.jargon_density}%`;
+        substanceFill.style.width = `${res.tech_metrics.rationale}%`;
+        substanceVal.innerText = `${Math.floor(res.tech_metrics.rationale)}%`;
+        updateArc(res.sentences, res.paragraphs, res.headings);
+        render(res.findings, res.sentences);
+    } catch (e) {
+        console.error(e);
+        statusText.innerText = "Engine Error";
+        statusCont.className = "status-indicator error";
+    }
 }
+
+function updateStatus(res) {
+    statusCont.classList.remove('analyzing', 'fatigue', 'substance', 'humanity', 'error');
+    
+    const totalSents = res.sentences.length;
+    const redSents = res.sentences.filter(s => {
+        // Recalculate fatigue for the status check
+        const idx = res.sentences.indexOf(s);
+        const f = res.sentences.slice(Math.max(0, idx - 2), idx + 1).reduce((acc, curr) => acc + (curr.length > 20 ? 1 : 0), 0);
+        return f >= 2;
+    }).length;
+
+    if (redSents / totalSents > 0.15) {
+        statusText.innerText = "Readability Fatigue!";
+        statusCont.classList.add('fatigue');
+    } else if (res.tech_metrics.rationale < 40) {
+        statusText.innerText = "Substance Needed";
+        statusCont.classList.add('substance');
+    } else if (res.tech_metrics.humanity < 40) {
+        statusText.innerText = "More Voice Needed";
+        statusCont.classList.add('humanity');
+    } else {
+        statusText.innerText = "Draft Optimized";
+        statusCont.classList.add('ready');
+    }
+}
+
+let lastHTML = ""; // For dirty checking
 
 function updateArc(sents, paras, headings) {
     if (!sents || sents.length < 2) return;
@@ -180,8 +238,9 @@ function updateArc(sents, paras, headings) {
     arcSegments.innerHTML = '';
     const w = 200, h = 60, p = 10;
     
+    const paraMap = getSentenceParaMap(sents, paras);
     const pts = sents.map((s, i) => {
-        const para = paras.find(pr => s.start >= pr.start && s.end <= pr.end);
+        const para = paraMap[i];
         const heading = headings.find(h => s.start >= h.start && s.start < h.end);
         const fatigue = sents.slice(Math.max(0, i - 2), i + 1).reduce((acc, curr) => acc + (curr.length > 20 ? 1 : 0), 0);
         return { 
@@ -189,7 +248,8 @@ function updateArc(sents, paras, headings) {
             y: h - (Math.min(s.length, 30) / 30 * (h - p * 2)) - p, 
             gap: para && para.end === s.end, 
             isHeading: !!heading,
-            start: s.start
+            start: s.start,
+            fatigue
         };
     });
     
@@ -237,7 +297,10 @@ function render(f, sents) {
         sf.forEach(x => { html += text.substring(cur, x.start) + `<span class="mark mark-${x.type}" data-type="${x.type}" data-suggestion="${x.suggestion}">${text.substring(x.start, x.end)}</span>`; cur = x.end; });
         html += text.substring(cur, s.end) + `</span>`;
     });
-    if (ed.innerHTML !== html) { ed.innerHTML = html; setCaret(ed, offset); }
+    if (ed.innerHTML !== html) { 
+        ed.innerHTML = html; 
+        setCaret(ed, offset); 
+    }
     attach();
 }
 
