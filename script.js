@@ -167,23 +167,48 @@ function analyze() {
 
 function updateArc(sents, paras) {
     if (!sents || sents.length < 2) return;
+    const arcSegments = document.getElementById('arc-segments');
+    if (!arcSegments) return;
+    arcSegments.innerHTML = '';
     const w = 200, h = 60, p = 10;
+    
     const pts = sents.map((s, i) => {
-        const isLastInPara = paras.some(pr => pr.end === s.end);
-        const fatigue = sents.slice(Math.max(0, i - 2), i + 1).reduce((acc, curr) => acc + (curr.length > 20 ? 1 : 0), 0);
-        return { x: (i / (sents.length - 1)) * w, y: h - (Math.min(s.length, 30) / 30 * (h - p * 2)) - p, gap: isLastInPara, fatigue };
+        const para = paras.find(pr => s.start >= pr.start && s.end <= pr.end);
+        const fatigue = sents.slice(Math.max(0, i - 2), i + 1).reduce((acc, curr) => acc + (curr.length > 25 ? 1 : 0), 0);
+        return { 
+            x: (i / (sents.length - 1)) * w, 
+            y: h - (Math.min(s.length, 30) / 30 * (h - p * 2)) - p, 
+            gap: para && para.end === s.end, 
+            isHeading: para && para.isHeading && s.start === para.start,
+            fatigue 
+        };
     });
     
-    let d = "";
     for (let i = 0; i < pts.length - 1; i++) {
         const p1 = pts[i], p2 = pts[i + 1];
-        if (i === 0) d += `M ${p1.x},${p1.y}`;
+        if (p1.gap && i < pts.length - 2) continue; // Skip segment for paragraph gap
+        
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const color = p1.fatigue >= 2 ? '#FF5E5E' : (p1.fatigue >= 1 ? '#FFB347' : '#47A1FF');
-        // Simple lines to allow easy gaps and multi-colors (though SVG path color is usually uniform, we'll use gaps for now)
-        if (p1.gap && i < pts.length - 2) d += ` M ${p2.x},${p2.y}`;
-        else d += ` L ${p2.x},${p2.y}`;
+        path.setAttribute('d', `M ${p1.x},${p1.y} L ${p2.x},${p2.y}`);
+        path.setAttribute('stroke', color);
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke-linecap', 'round');
+        if (p1.fatigue >= 1) path.setAttribute('style', `filter: drop-shadow(0 0 3px ${color})`);
+        arcSegments.appendChild(path);
+        
+        if (p1.isHeading) {
+            const marker = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            marker.setAttribute('x', p1.x - 0.5);
+            marker.setAttribute('y', p1.y - 5);
+            marker.setAttribute('width', '1');
+            marker.setAttribute('height', '10');
+            marker.setAttribute('fill', '#A78BFF');
+            marker.setAttribute('style', 'filter: drop-shadow(0 0 5px rgba(167,139,255,0.8))');
+            arcSegments.appendChild(marker);
+        }
     }
-    pacingPath.setAttribute('d', d);
 }
 
 function render(f, sents) {

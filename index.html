@@ -35,6 +35,17 @@
                 <div class="score-header"><span class="score-label">Humanity</span><span class="score-value" id="val-humanity">0%</span></div>
                 <div class="progress-bar"><div class="progress-fill" id="fill-humanity" style="width: 0%;"></div></div>
             </div>
+            <div class="score-card" style="margin-top: 1rem;">
+                <div class="score-header"><span class="score-label">Substance (Why)</span><span class="score-value" id="val-substance">0%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="fill-substance" style="width: 0%; background: #00FF94;"></div></div>
+            </div>
+            <div class="pacing-container" style="margin-top: 1rem;">
+                <span class="score-label">Scannability Map</span>
+                <svg id="pacing-arc" viewBox="0 0 200 60" preserveAspectRatio="none">
+                    <g id="arc-segments"></g>
+                    <path id="pacing-path" d="M0 30 Q 50 30, 100 30 T 200 30" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+                </svg>
+            </div>
             <div class="divider"></div>
             <h3 class="section-title">Tech Blog Intelligence</h3>
             <div class="tech-stats">
@@ -52,16 +63,6 @@
                     </svg>
                     <div class="gauge-label"><span id="label-jargon">0%</span><small>Jargon</small></div>
                 </div>
-            </div>
-            <div class="score-card" style="margin-top: 1rem;">
-                <div class="score-header"><span class="score-label">Substance (Why)</span><span class="score-value" id="val-substance">0%</span></div>
-                <div class="progress-bar"><div class="progress-fill" id="fill-substance" style="width: 0%; background: #00FF94;"></div></div>
-            </div>
-            <div class="pacing-container">
-                <span class="score-label">Scannability Map</span>
-                <svg id="pacing-arc" viewBox="0 0 200 60" preserveAspectRatio="none">
-                    <path id="pacing-path" d="M0 30 Q 50 30, 100 30 T 200 30" fill="none" stroke="var(--primary)" stroke-width="2" />
-                </svg>
             </div>
         </div>
     </div>
